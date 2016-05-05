@@ -2,16 +2,46 @@
 
 <head>
   <script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+  <script type="text/javascript" src="webgl-utils.js"></script>
 
   <script id="shader-fs" type="x-shader/x-fragment">
-    precision mediump float; varying vec4 vColor; void main(void) { gl_FragColor = vColor; }
+    precision mediump float;
+    varying vec4 vColor;
+    void main(void) {
+      gl_FragColor = vColor;
+    }
   </script>
 
   <script id="shader-vs" type="x-shader/x-vertex">
-    attribute vec3 aVertexPosition; attribute vec4 aVertexColor; uniform mat4 uMVMatrix; uniform mat4 uPMatrix; varying vec4 vColor; void main(void) { gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0); vColor = aVertexColor; }
+    attribute vec3 aVertexPosition;
+    attribute vec4 aVertexColor;
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    varying vec4 vColor;
+    void main(void) {
+      gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+      vColor = aVertexColor;
+    }
   </script>
 
   <script type="text/javascript">
+    scale_color = function(z, min, max) {
+
+      var range = max - min;
+      var z = z - min;
+      var r = ((1 * z) / range);
+      var g = ((1 * (range - z)) / range);
+      var b = 0;
+
+      var color = [];
+      color[0] = r;
+      color[2] = g;
+      color[1] = b;
+
+      return color;
+
+    }
+
     var gl;
 
     function initGL(canvas) {
@@ -111,7 +141,7 @@
     var gridVertexColorBuffer;
     var funcVertexColorBuffer;
 
-    var gridsize = 10;
+    var gridsize = 20;
 
     function initBuffers() {
 
@@ -149,34 +179,43 @@
 
       funcVertexPositionBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, funcVertexPositionBuffer);
-
-      vertices = new Array((gridsize+1)*(gridsize+1)*3);
-      console.log(gridsize);
+      vertices = new Array((gridsize + 1) * (gridsize + 1) * 3);
       counter = 0;
       var tempx = -width / 2;
       var tempy = -width / 2;
+      colors2 = [];
+      max_value = func(0, 0) + 0.4;
+      min_value = func(tempx, tempy) + 0.4;
+      //console.log(min_value + "-" + max_value);
       for (var x = 0; x <= gridsize; x++) {
         tempx = -width / 2;
         for (var y = 0; y <= gridsize; y++) {
-          value = func(tempx, tempy)+0.8;
+          value = func(tempx, tempy)+0.4;
           vertices[counter] = tempx;
           vertices[counter + 1] = tempy;
           vertices[counter + 2] = value;
+          var red = value;
+          var blue = 1 - value;
+          //console.log(tempx + ", " + tempy + ": " + value + ": " + red + "; " + blue);
+          color = scale_color(value, min_value, max_value);
+          //console.log(color);
+          colors2 = colors2.concat([color[0], 0.0, color[2], 1.0]);
           //console.log(counter+"... "+tempx+"; "+tempy+": "+value);
           tempx = tempx + stepsize;
           counter = counter + 3;
         }
         tempy = tempy + stepsize;
       }
+      //console.log(colors2.length);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
       funcVertexPositionBuffer.itemSize = 3;
-      funcVertexPositionBuffer.numItems = (gridsize+1)*(gridsize+1);
+      funcVertexPositionBuffer.numItems = (gridsize + 1) * (gridsize + 1);
 
       gridVertexColorBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, gridVertexColorBuffer);
       colors = [];
       for (var i = 0; i < (gridsize + 1) * 2 * 2; i++) {
-        colors = colors.concat([0.5, 0.5, 1.0, 1.0]);
+        colors = colors.concat([0.5, 0.5, 0.5, 1.0]);
       }
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
       gridVertexColorBuffer.itemSize = 4;
@@ -184,14 +223,18 @@
 
       funcVertexColorBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, funcVertexColorBuffer);
-      colors2 = [];
-      for (var i = 0; i < (gridsize+1)*(gridsize+1); i++) {
-        colors2 = colors2.concat([1.0, 0.5, 1.0, 1.0]);
+      for (var i = 0; i < (gridsize + 1) * (gridsize + 1); i++) {
+        //  colors2 = colors2.concat([1.0, 0.5, 1.0, 1.0]);
       }
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors2), gl.STATIC_DRAW);
       funcVertexColorBuffer.itemSize = 4;
-      funcVertexColorBuffer.numItems = (gridsize+1)*(gridsize+1);
+      funcVertexColorBuffer.numItems = (gridsize + 1) * (gridsize + 1);
 
+    }
+
+    function tick() {
+      requestAnimFrame(tick);
+      drawScene();
     }
 
     function webGLStart() {
@@ -203,7 +246,11 @@
       gl.clearColor(0.0, 0.0, 0.0, 1.0);
       gl.enable(gl.DEPTH_TEST);
 
-      drawScene();
+      canvas.onmousedown = handleMouseDown;
+      document.onmouseup = handleMouseUp;
+      document.onmousemove = handleMouseMove;
+
+      tick();
 
     }
 
@@ -215,13 +262,15 @@
       gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-      mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+      mat4.perspective(45, 1, 0.1, 100.0, pMatrix);
 
       mat4.identity(mvMatrix);
 
       mat4.translate(mvMatrix, [0.0, 0.0, -7.0]);
 
-      mat4.rotate(mvMatrix, degToRad(-70), [1, 0, 0]);
+      mat4.multiply(mvMatrix, moonRotationMatrix);
+
+      mat4.rotate(mvMatrix, degToRad(-85), [1, 0, 0]);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, gridVertexPositionBuffer);
       gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, gridVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -238,8 +287,14 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, funcVertexColorBuffer);
       gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, funcVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
 
-      for (var i=0;i<(gridsize+1);i++){
-        gl.drawArrays(gl.LINE_STRIP, i*(gridsize+1),gridsize+1);
+      for (var i = 0; i < (gridsize + 1); i++) {
+        gl.drawArrays(gl.LINE_STRIP, i * (gridsize + 1), gridsize + 1);
+      }
+
+      mat4.rotate(mvMatrix, degToRad(90), [0, 0, 1]);
+      setMatrixUniforms();
+      for (var i = 0; i < (gridsize + 1); i++) {
+        gl.drawArrays(gl.LINE_STRIP, i * (gridsize + 1), gridsize + 1);
       }
 
     }
@@ -254,6 +309,44 @@
       drawScene();
       console.log(value);
     }
+
+    var mouseDown = false;
+    var lastMouseX = null;
+    var lastMouseY = null;
+
+    var moonRotationMatrix = mat4.create();
+    mat4.identity(moonRotationMatrix);
+
+    function handleMouseDown(event) {
+      mouseDown = true;
+      lastMouseX = event.clientX;
+      lastMouseY = event.clientY;
+    }
+
+    function handleMouseUp(event) {
+      mouseDown = false;
+    }
+
+    function handleMouseMove(event) {
+      if (!mouseDown) {
+        return;
+      }
+      var newX = event.clientX;
+      var newY = event.clientY;
+
+      var deltaX = newX - lastMouseX;
+      var newRotationMatrix = mat4.create();
+      mat4.identity(newRotationMatrix);
+      mat4.rotate(newRotationMatrix, degToRad(deltaX / 10), [0, 1, 0]);
+
+      var deltaY = newY - lastMouseY;
+      mat4.rotate(newRotationMatrix, degToRad(deltaY / 10), [1, 0, 0]);
+
+      mat4.multiply(newRotationMatrix, moonRotationMatrix, moonRotationMatrix);
+
+      lastMouseX = newX
+      lastMouseY = newY;
+    }
   </script>
 </head>
 
@@ -261,7 +354,7 @@
   grid size:
   <form action="">
 
-    <input type="number" name="grid size" min="5" max="500" value=10 onchange="test(this.value)">
+    <input type="number" name="grid size" min="5" max="500" value=30 onchange="test(this.value)">
   </form>
 
   <canvas id="canvas" style="border: none;" width="500" height="500"></canvas>
